@@ -5,7 +5,7 @@
 
 ![decode journey](charts/decode_journey.png)
 
-Write-up with diagrams and a plain-language glossary: **[I Ran a 125B Model on Three RTX 3090s at 80 Tokens/s by Teaching llama.cpp Which Experts Matter](https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi)** (dev.to).
+Write-up with diagrams and a plain-language glossary: **[Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter](https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi)** (dev.to).
 
 ## the idea
 

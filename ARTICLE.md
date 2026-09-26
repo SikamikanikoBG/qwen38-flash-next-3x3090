@@ -1,9 +1,9 @@
 ---
-title: "I Ran a 125B Model on Three RTX 3090s at 80 Tokens/s by Teaching llama.cpp Which Experts Matter"
+title: "Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter"
 published: false
 description: "Qwen3.8-Flash-Next doesn't fit in 72 GB of VRAM. Stock llama.cpp runs it at 23 tok/s. A frequency-tiered expert format and a ~400-line patch get it to 80, entirely on the GPUs."
 tags: llm, qwen, homelab, ai
-cover_image: https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/cover.png
+cover_image: https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/cover-qwen38-flash-next.png
 ---
 
 **TL;DR:** Qwen3.8-Flash-Next is a 125B mixture-of-experts model: on paper it beats the Qwen3.8-27B I run in production everywhere, by +16.5 points on agentic coding. It does not fit in the 72 GB of VRAM my three RTX 3090s have, and stock llama.cpp, spilling a quarter of the experts into system RAM, runs it at **23 tokens/second**. Three changes get it to **80 tokens/second, entirely in VRAM**:
@@ -57,7 +57,7 @@ If you know what a KV cache is, skip this. If you don't, it's all you need for t
 
 ## the problem, in one picture
 
-![Where the 125B model lives: before and after](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/before_after.png)
+![Where Qwen3.8-Flash-Next (125B) lives: before and after](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/before_after_qwen38-flash-next.png)
 
 In 16-bit the model is 360 GB. Even the popular 4-bit build ([unsloth's UD-Q4_K_XL](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF)) is 111 GB: 72 GB of experts, 27 GB of n-gram table (which can stay on disk) and a few GB of everything else. The experts alone don't fit in 72 GB of VRAM once the rest of the model and the context need room too. So llama.cpp does the sensible thing: it puts the overflow experts in system RAM and computes them on the CPU.
 
