@@ -1,0 +1,75 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 13.0.2
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+0.29.344.182 I cmn          init: llama threadpool init, n_threads = 28
+0.29.546.992 I 
+0.29.547.192 I system_info: n_threads = 28 (n_threads_batch = 28) / 56 | CUDA : ARCHS = 860 | USE_GRAPHS = 1 | FA_QUANTS = all | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.29.850.503 I kl_divergence: computing over 12 chunks, n_ctx=2048, batch_size=2048, n_seq=1
+0.36.920.640 I kl_divergence: 7.07 seconds per pass - ETA 1.40 minutes
+
+chunk             PPL               ln(PPL(Q)/PPL(base))          KL Divergence              Δp RMS            Same top p
+   1       1.3910 ±    0.0474       0.02678 ±    0.01650       0.10918 ±    0.01133    12.489 ±  0.889 %    93.548 ±  0.768 %
+   2       1.3702 ±    0.0309       0.04429 ±    0.01340       0.12189 ±    0.00912    13.639 ±  0.621 %    93.304 ±  0.553 %
+   3       1.4527 ±    0.0307       0.04337 ±    0.01259       0.15024 ±    0.00898    14.729 ±  0.533 %    92.506 ±  0.475 %
+   4       1.9619 ±    0.0504       0.03185 ±    0.01055       0.14371 ±    0.00700    13.670 ±  0.448 %    91.178 ±  0.443 %
+   5       2.1469 ±    0.0530       0.03083 ±    0.00879       0.13144 ±    0.00578    13.052 ±  0.391 %    91.202 ±  0.396 %
+   6       2.0670 ±    0.0451       0.03305 ±    0.00802       0.12423 ±    0.00505    12.878 ±  0.353 %    91.365 ±  0.359 %
+   7       1.9533 ±    0.0377       0.03429 ±    0.00733       0.12174 ±    0.00467    13.095 ±  0.330 %    91.677 ±  0.326 %
+   8       2.0538 ±    0.0378       0.03562 ±    0.00687       0.12243 ±    0.00421    12.981 ±  0.302 %    91.117 ±  0.315 %
+   9       2.2064 ±    0.0396       0.03261 ±    0.00657       0.12502 ±    0.00385    12.889 ±  0.277 %    90.486 ±  0.306 %
+  10       2.3968 ±    0.0428       0.03219 ±    0.00605       0.11952 ±    0.00350    12.446 ±  0.261 %    90.479 ±  0.290 %
+  11       2.5325 ±    0.0438       0.03050 ±    0.00566       0.11603 ±    0.00323    12.088 ±  0.246 %    90.403 ±  0.278 %
+  12       2.7707 ±    0.0480       0.03119 ±    0.00531       0.11299 ±    0.00298    11.767 ±  0.233 %    90.135 ±  0.269 %
+
+====== Perplexity statistics ======
+Mean PPL(Q)                   :   2.770739 ±   0.047957
+Mean PPL(base)                :   2.685651 ±   0.046272
+Cor(ln(PPL(Q)), ln(PPL(base))):  95.27%
+Mean ln(PPL(Q)/PPL(base))     :   0.031191 ±   0.005310
+Mean PPL(Q)/PPL(base)         :   1.031682 ±   0.005478
+Mean PPL(Q)-PPL(base)         :   0.085087 ±   0.014580
+
+====== KL divergence statistics ======
+Mean    KLD:   0.112987 ±   0.002983
+Maximum KLD:   7.312711
+99.9%   KLD:   4.207306
+99.0%   KLD:   1.526153
+95.0%   KLD:   0.511221
+90.0%   KLD:   0.262012
+Median  KLD:   0.015913
+10.0%   KLD:   0.000119
+ 5.0%   KLD:   0.000037
+ 1.0%   KLD:   0.000005
+ 0.1%   KLD:  -0.000000
+Minimum KLD:  -0.000014
+
+====== Token probability statistics ======
+Mean    Δp: -1.001 ± 0.106 %
+Maximum Δp: 97.326%
+99.9%   Δp: 72.279%
+99.0%   Δp: 36.261%
+95.0%   Δp: 11.912%
+90.0%   Δp:  5.031%
+75.0%   Δp:  0.404%
+Median  Δp: -0.019%
+25.0%   Δp: -1.272%
+10.0%   Δp: -8.585%
+ 5.0%   Δp: -17.433%
+ 1.0%   Δp: -48.542%
+ 0.1%   Δp: -84.785%
+Minimum Δp: -98.055%
+RMS Δp    : 11.767 ± 0.233 %
+Same top p: 90.135 ± 0.269 %
+

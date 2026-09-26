@@ -39,7 +39,7 @@ Single request, 256 generated tokens, greedy; warm medians unless noted. Raw dat
 | stock llama.cpp, UD-Q4_K_XL, auto-fit | GPU + 25% in CPU RAM | 23 | 47–306 (page-cache thrash) |
 | + `--load-mode none` | GPU + 25% in CPU RAM | 25 | 658–725 |
 | + hot/cold split (this patch) | GPU + coldest 19% in CPU RAM | 32 | 163–178 |
-| **tiered-53 + MTP (this repo)**, 128k ctx | **100% GPU** | **80–88** | **~950** |
+| **tiered-53 + MTP (this repo)**, 128k ctx | **100% GPU** | **79–92** | **541–947** |
 | tiered-50 + MTP, 256k ctx, q8_0 KV | 100% GPU | 77 | see [chart](charts/speed_vs_context.png) |
 
 Quality vs Q8_0 (wikitext-2, 12 x 2048 tokens):

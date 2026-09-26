@@ -108,9 +108,11 @@ if depths:
     for lab, tag, c in prof:
         ds = [d for d in depths if med(tag, d) is not None]
         pt = [st.median([r["prompt_n"] for r in speed if r["tag"] == tag and r["depth"] == d]) / 1000 for d in ds]
-        a1.plot(pt, [med(tag, d) for d in ds], "-o", color=c, lw=2, ms=8, mec=SURF, mew=2, label=lab)
-        a2.plot(pt, [med(tag, d, "ttft_s") for d in ds], "-o", color=c, lw=2, ms=8, mec=SURF, mew=2, label=lab)
-    a1.set_title("Decode speed vs prompt length"); a1.set_ylabel("tokens/second"); a1.set_ylim(0, None)
+        a1.plot(pt, [med(tag, d, warm_only=False) for d in ds], "-o", color=c, lw=2, ms=8, mec=SURF, mew=2, label=lab)
+        a2.plot(pt, [med(tag, d, "ttft_s", warm_only=False) for d in ds], "-o", color=c, lw=2, ms=8, mec=SURF, mew=2, label=lab)
+    a1.set_title("Decode speed vs prompt length"); a1.set_ylabel("tokens/second"); a1.set_ylim(0, 100)
+    a1.text(0.99, 0.02, "mean of 2 runs per point; single-stream decode varies ~10% run to run",
+            transform=a1.transAxes, ha="right", va="bottom", fontsize=9, color=MUTED)
     a2.set_title("Time to first token vs prompt length"); a2.set_ylabel("seconds")
     for a in (a1, a2):
         a.set_xlabel("prompt length (thousand tokens)"); a.grid(color=GRID); a.legend(frameon=False, fontsize=10)

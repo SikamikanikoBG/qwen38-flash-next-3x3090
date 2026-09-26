@@ -1,0 +1,2 @@
+{"test": "needle", "prompt_tokens": 173692, "depth": 0.45, "expected": "6BC5XYE8FS", "answer": "6BC5XYE8FS", "correct": true, "ttft_s": 368.3, "prefill_tps": 471.6, "wall_s": 372.5}
+{"test": "needle", "prompt_tokens": 112711, "depth": 0.9, "expected": "EZBVXQ94HT", "answer": "EZBVXQ94HT", "correct": true, "ttft_s": 215.4, "prefill_tps": 523.4, "wall_s": 221.0}

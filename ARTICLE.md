@@ -3,7 +3,7 @@ title: "I Ran a 125B Model on Three RTX 3090s at 80 Tokens/s by Teaching llama.c
 published: false
 description: "Qwen3.8-Flash-Next doesn't fit in 72 GB of VRAM. Stock llama.cpp runs it at 23 tok/s. A frequency-tiered expert format and a ~400-line patch get it to 80, entirely on the GPUs."
 tags: llm, qwen, homelab, ai
-cover_image: {{COVER}}
+cover_image: https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/cover.png
 ---
 
 **TL;DR:** Qwen3.8-Flash-Next is a 125B mixture-of-experts model: on paper it beats the Qwen3.8-27B I run in production everywhere, by +16.5 points on agentic coding. It does not fit in the 72 GB of VRAM my three RTX 3090s have, and stock llama.cpp, spilling a quarter of the experts into system RAM, runs it at **23 tokens/second**. Three changes get it to **80 tokens/second, entirely in VRAM**:
@@ -12,7 +12,7 @@ cover_image: {{COVER}}
 2. **Store them at three precisions.** Popular experts keep more bits and rare ones get squeezed harder, so the whole model fits on the GPUs.
 3. **Patch llama.cpp** (~400 lines) so one routing decision drives three expert tables at once, then add speculative decoding on top.
 
-Quality stays close to the 8-bit reference: **+1.9% perplexity, 91% same next token, GSM8K 95.5%** (the 27B scores 95–96.5% on the same harness). There's also a 256k-context profile that found a needle 186,000 tokens deep. The trade-offs are real, and I've listed them. Everything is open: [patches, tools, raw measurements]({{REPO}}).
+Quality stays close to the 8-bit reference: **+1.9% perplexity, 91% same next token, GSM8K 95.5%** (the 27B scores 95–96.5% on the same harness). There's also a 256k-context profile that finds a random code hidden 173,000 tokens deep. The trade-offs are real, and I've listed them. Everything is open: [patches, tools, raw measurements](https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090).
 
 ## the use case
 
@@ -57,7 +57,7 @@ If you know what a KV cache is, skip this. If you don't, it's all you need for t
 
 ## the problem, in one picture
 
-![Where the 125B model lives: before and after]({{D1}})
+![Where the 125B model lives: before and after](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/before_after.png)
 
 In 16-bit the model is 360 GB. Even the popular 4-bit build ([unsloth's UD-Q4_K_XL](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF)) is 111 GB: 72 GB of experts, 27 GB of n-gram table (which can stay on disk) and a few GB of everything else. The experts alone don't fit in 72 GB of VRAM once the rest of the model and the context need room too. So llama.cpp does the sensible thing: it puts the overflow experts in system RAM and computes them on the CPU.
 
@@ -75,7 +75,7 @@ Speculative decoding (MTP) barely helped: 24–29 tok/s. The reason matters for 
 
 Here's the observation the whole project rests on. llama.cpp's calibration data (the *importance matrix* unsloth publishes with their quants) records how often each of the 24,576 experts was picked on real text:
 
-![Routing skew: a few experts do most of the work]({{C_SKEW}})
+![Routing skew: a few experts do most of the work](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/routing_skew.png)
 
 In the average layer, **the busiest 25% of experts handle 52% of the tokens, and the busiest 80% handle 95%.** Stock llama.cpp can only place *whole layers* of experts: a layer's 512 experts are one tensor, all on the GPU or all on the CPU. It offloads a quarter of the experts, including popular ones, so a quarter of the expert work lands on the slow path.
 
@@ -103,21 +103,21 @@ The CPU was barely reading any experts anymore; it was the *round trips* that co
 
 ## step 4: three shelves, all on the GPU
 
-![How one word gets written]({{D2}})
+![How one word gets written](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/one_word.png)
 
 The idea: if some experts do most of the work, **give them more bits and squeeze the rarely-used ones harder**. Everything still fits in VRAM, and most tokens still see a well-preserved expert. Think of a library that keeps its bestsellers in hardcover and prints the rarely-borrowed titles as compact paperbacks, so the whole collection fits in the building.
 
-![What I built]({{D3}})
+![What I built](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/pipeline.png)
 
 Two pieces make it work.
 
-**An offline re-packer** ([`tools/expert_tiers.py`]({{REPO}}/blob/main/tools/expert_tiers.py)). It starts from the 8-bit model (188 GB) and uses the importance matrix for both *how often* each expert is used and *which inputs matter* inside it. A greedy planner fills a VRAM budget: each byte goes to the expert where it removes the most expected error. Every expert is then re-quantized with llama.cpp's own quantizers, and the file is written with the experts reordered hottest-first as three tensors per layer. One wrinkle: the down-projection matrices have rows 640 wide, which the fancy 2–3-bit formats can't handle (they need multiples of 256). So they get their own ladder: IQ4_NL / MXFP4 instead of IQ4_XS / IQ3.
+**An offline re-packer** ([`tools/expert_tiers.py`](https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090/blob/main/tools/expert_tiers.py)). It starts from the 8-bit model (188 GB) and uses the importance matrix for both *how often* each expert is used and *which inputs matter* inside it. A greedy planner fills a VRAM budget: each byte goes to the expert where it removes the most expected error. Every expert is then re-quantized with llama.cpp's own quantizers, and the file is written with the experts reordered hottest-first as three tensors per layer. One wrinkle: the down-projection matrices have rows 640 wide, which the fancy 2–3-bit formats can't handle (they need multiples of 256). So they get their own ladder: IQ4_NL / MXFP4 instead of IQ4_XS / IQ3.
 
-**A patched llama.cpp** ([`patches/`]({{REPO}}/tree/main/patches)). `mul_mat_id`, the operation that runs "each word through its chosen experts", learns to take an **id range**. Each shelf's matrix multiply sees the router's full choice list, computes only the ids that fall on its shelf, and writes zeros for the rest. The three results simply add up. That meant touching the CPU kernels, three CUDA paths (decode, prefill, and the fused gate+up+activation kernel) and the loader. On top sits Qwen's multi-token-prediction draft head, from a [not-yet-merged llama.cpp PR](https://github.com/ggml-org/llama.cpp/pull/28243), re-quantized to 4 bits so it fits too.
+**A patched llama.cpp** ([`patches/`](https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090/tree/main/patches)). `mul_mat_id`, the operation that runs "each word through its chosen experts", learns to take an **id range**. Each shelf's matrix multiply sees the router's full choice list, computes only the ids that fall on its shelf, and writes zeros for the rest. The three results simply add up. That meant touching the CPU kernels, three CUDA paths (decode, prefill, and the fused gate+up+activation kernel) and the loader. On top sits Qwen's multi-token-prediction draft head, from a [not-yet-merged llama.cpp PR](https://github.com/ggml-org/llama.cpp/pull/28243), re-quantized to 4 bits so it fits too.
 
 Result, in one chart:
 
-![Decode journey]({{C_JOURNEY}})
+![Decode journey](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/decode_journey.png)
 
 ## the four bugs, briefly
 
@@ -132,7 +132,7 @@ For people who'll try this, and because two of them are delightful.
 
 The honest meter is KL divergence against the 8-bit model over 24,576 tokens of Wikipedia text:
 
-![Quality vs size]({{C_QUAL}})
+![Quality vs size](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/quality_vs_size.png)
 
 | model | expert size | fits in VRAM | perplexity vs 8-bit | KLD | same top token |
 |---|---|---|---|---|---|
@@ -149,27 +149,37 @@ What I take from it:
 
 ## speed vs context, and the 256k profile
 
-![Speed vs context]({{C_CTX}})
+![Speed vs context](https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/speed_vs_context.png)
 
-{{CTX_TEXT}}
+Both profiles start at **~80 tokens/second** on a short prompt and slow down as the prompt grows. The per-word attention and indexer work grows with context, and the draft head's guesses get a little worse too. Typical numbers, averaging two runs:
 
-The 256k profile needed two more compromises. The KV cache drops to 8-bit, and experts shrink to 49.5 GiB, because the sparse-attention indexer's scratch memory grows with context and pushed a card out of memory at ~200k on the first try. After rebalancing layers across the cards, it read **{{NEEDLE_TOKENS}} tokens of Wikipedia with a random 10-character code hidden at 45% depth, and returned the code: {{NEEDLE_RESULT}}.** It took {{NEEDLE_TTFT}} to read that much. Long-context prefill on this architecture is still the slow part.
+| prompt | 128k profile: decode / time to first token | 256k profile: decode / time to first token |
+|---|---|---|
+| 4k tokens | 82 tok/s / 7–9 s | 67 tok/s / 7–8 s |
+| 15k tokens | 66 tok/s / 18–22 s | 58 tok/s / 19–22 s |
+| 30k tokens | 58 tok/s / 35 s | 54 tok/s / 38 s |
+| 61k tokens | 53 tok/s / 76–79 s | 51 tok/s / 82 s |
+| 95k / 122k tokens | 39 tok/s / 140 s | 35 tok/s / 190 s |
+
+Prefill runs at **540–860 tokens/second**. That's the weak spot next to the 27B's ~1,300, and it's where I'd look next: it's also the part that makes a 120k-token prompt a three-minute wait.
+
+The 256k profile needed two more compromises. The KV cache drops to 8-bit, and experts shrink to 49.5 GiB, because the sparse-attention indexer's scratch memory grows with context and pushed a card out of memory at ~200k on the first try. After rebalancing layers across the cards, it read **173,692 tokens of Wikipedia with a random 10-character code hidden at 45% depth, and returned the code: exactly right (`6BC5XYE8FS`). A second run with the code at 90% depth of 112,711 tokens was also exact.** It took 6.1 minutes (472 tokens/second) to read that much. Long-context prefill on this architecture is still the slow part.
 
 ## what it costs to run
 
-{{POWER_TEXT}}
+Measured at the cards (`nvidia-smi`, 5 Hz, three 1,024-token generations per profile): the three 3090s draw **~540 W together while decoding** and ~124 W at rest with the model loaded. That's **7.5–8.4 joules per token**, 2.1–2.3 kWh per million tokens. On my tariff (0.30 BGN/kWh day, 0.18 night) **a million generated tokens cost 0.63–0.70 BGN in daytime, 0.38–0.42 BGN at night**, about $0.35–0.40. [The 27B costs 0.21–0.34 BGN](https://dev.to/sikamikanikobg/qwen38-27b-on-one-rtx-3090-vs-two-20-decode-14-cold-prefill-and-3x-on-cached-prompts-55kc) for the same million, so the bigger brain costs roughly twice as much per word, all three cards included. It's still coffee money.
 
 ## what I'd not claim
 
 - **It's single-user.** Everything here is one request at a time. The 27B on vLLM batches many users far better.
-- **The 27B is still faster.** About 135 vs 80 tok/s decode, and roughly 1,300 vs 600–950 tok/s prefill. The 125B is smarter, not quicker.
+- **The 27B is still faster.** About 135 vs 80 tok/s decode, and roughly 1,300 vs 540–860 tok/s prefill. The 125B is smarter, not quicker.
 - **It uses all three cards.** You can't also keep the 27B running.
 - **The quality numbers are wikitext + GSM8K.** They say the compression is gentle. They don't prove the agentic gains survive intact; that needs agent benchmarks I haven't run yet.
 - **The tier planner is a heuristic.** The measurements say it helps; a calibrated one would help more.
 
 ## reproduce it
 
-Everything is in **[{{REPO_NAME}}]({{REPO}})**: both llama.cpp patches, the re-packer, the benchmark scripts, and every raw number behind the charts. The short version:
+Everything is in **[SikamikanikoBG/qwen38-flash-next-3x3090](https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090)**: both llama.cpp patches, the re-packer, the benchmark scripts, and every raw number behind the charts. The short version:
 
 ```bash
 # llama.cpp at 81bc6b8 + MTP PR #28243 + the tiering patch
