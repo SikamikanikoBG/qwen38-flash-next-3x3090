@@ -1,8 +1,14 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter</title>
-<meta name="description" content="Qwen3.8-Flash-Next doesn't fit in 72 GB of VRAM. Stock llama.cpp runs it at 23 tok/s. A frequency-tiered expert format and a ~400-line patch get it to 80, entirely on the GPUs."><link rel="canonical" href="https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{max-width:760px;margin:40px auto;padding:0 20px;font-family:Georgia,serif;line-height:1.6;color:#1a1a1a}img{max-width:100%}pre{background:#f5f5f5;padding:12px;overflow-x:auto}</style></head>
-<body><article><h1>Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter</h1><p><em>Qwen3.8-Flash-Next doesn't fit in 72 GB of VRAM. Stock llama.cpp runs it at 23 tok/s. A frequency-tiered expert format and a ~400-line patch get it to 80, entirely on the GPUs.</em></p><img src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/cover-qwen38-flash-next.png" alt="cover">
+<style>body{max-width:760px;margin:40px auto;padding:0 20px;font-family:Georgia,serif;line-height:1.6;color:#1a1a1a}
+img{max-width:100%} figure{margin:28px 0} figcaption{font-size:14px;color:#666;text-align:center}
+pre{background:#f5f5f5;padding:12px;overflow-x:auto} .tip{font-family:sans-serif;background:#fff7e6;border:1px solid #f5d38a;padding:12px 16px;border-radius:8px;font-size:15px}</style></head>
+<body>
+<div class="tip">Medium: press <b>Ctrl+A</b> inside the article below is not needed — select from the title down to the last line, <b>Ctrl+C</b>, then paste into a new Medium story.</div>
+<article>
+<h1>Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter</h1>
+<h2>Qwen3.8-Flash-Next doesn't fit in 72 GB of VRAM. Stock llama.cpp runs it at 23 tok/s. A frequency-tiered expert format and a ~400-line patch get it to 80, entirely on the GPUs.</h2>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/cover-qwen38-flash-next.jpg" alt="Qwen3.8-Flash-Next on three RTX 3090s at 80 tok/s"></figure>
 <p><strong>TL;DR:</strong> Qwen3.8-Flash-Next is a 125B mixture-of-experts model: on paper it beats the Qwen3.8-27B I run in production everywhere, by +16.5 points on agentic coding. It does not fit in the 72 GB of VRAM my three RTX 3090s have, and stock llama.cpp, spilling a quarter of the experts into system RAM, runs it at <strong>23 tokens/second</strong>. Three changes get it to <strong>80 tokens/second, entirely in VRAM</strong>:</p>
 <ol>
 <li><strong>Sort the experts by how often they're used.</strong> They are wildly unequal: the busiest 25% handle 52% of the work.</li>
@@ -13,8 +19,7 @@
 <h2>the use case</h2>
 <p>My box, <strong>vader</strong>, runs <a href="https://dev.to/sikamikanikobg/qwen38-27b-on-2x-rtx-3090-my-first-local-model-i-actually-trust-fpi">Qwen3.8-27B</a> around the clock: two RTX 3090s, vLLM, about 135 tokens/second. It's the first local model I actually trust with agent work, and it does most of the work my assistant does.</p>
 <p>Then Qwen shipped <strong>Qwen3.8-Flash-Next</strong>, the preview of their Qwen4 architecture. Their own model card puts it ahead of my 27B on almost everything I care about:</p>
-<p><img alt="Qwen's own model-card numbers: Flash-Next vs Qwen3.8-27B." src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/docs/img/table_benchmarks.png" /></p>
-<p><em>Qwen's own model-card numbers: Flash-Next vs Qwen3.8-27B.</em></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_benchmarks.jpg" alt="Qwen's own model-card numbers: Flash-Next vs Qwen3.8-27B."><figcaption>Qwen's own model-card numbers: Flash-Next vs Qwen3.8-27B.</figcaption></figure>
 <p>So the goal was simple to state: <strong>the smarter model, on the same three cards, with decode and time-to-first-token that still feel interactive.</strong> No new hardware. I told my AI engineer (Claude Code, more on that at the end) that "no" was not an acceptable answer.</p>
 <h2>the box</h2>
 <ul>
@@ -39,7 +44,7 @@
 <li><strong>llama.cpp / GGUF.</strong> The inference engine I patched, and its model-file format.</li>
 </ul>
 <h2>the problem, in one picture</h2>
-<p><img alt="Where Qwen3.8-Flash-Next (125B) lives: before and after" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/before_after_qwen38-flash-next.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/before_after_qwen38-flash-next.jpg" alt="Where Qwen3.8-Flash-Next (125B) lives: before and after"><figcaption>Where Qwen3.8-Flash-Next (125B) lives: before and after</figcaption></figure>
 <p>In 16-bit the model is 360 GB. Even the popular 4-bit build (<a href="https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF">unsloth's UD-Q4_K_XL</a>) is 111 GB: 72 GB of experts, 27 GB of n-gram table (which can stay on disk) and a few GB of everything else. The experts alone don't fit in 72 GB of VRAM once the rest of the model and the context need room too. So llama.cpp does the sensible thing: it puts the overflow experts in system RAM and computes them on the CPU.</p>
 <p>On this machine that means <strong>23 tokens/second</strong>. With one memory stick per socket, the CPU reads those experts about ten times slower than a GPU would. And for every word, the work bounces between the GPUs and the CPU dozens of times, so each GPU waits.</p>
 <h2>step 1: the obvious setup, and the first trap</h2>
@@ -48,7 +53,7 @@
 <p>Speculative decoding (MTP) barely helped: 24–29 tok/s. The reason matters for everything that follows. A draft of 5 words means the big model checks 6 words at once. Each word picks 10 experts, so one check can touch up to 60 <em>different</em> experts per layer instead of 10, and the slow ones in CPU RAM get hit harder. <strong>As long as experts live in CPU RAM, nothing else will make this fast.</strong></p>
 <h2>step 2: the experts are not equal</h2>
 <p>Here's the observation the whole project rests on. llama.cpp's calibration data (the <em>importance matrix</em> unsloth publishes with their quants) records how often each of the 24,576 experts was picked on real text:</p>
-<p><img alt="Routing skew: a few experts do most of the work" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/routing_skew.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/routing_skew.jpg" alt="Routing skew: a few experts do most of the work"><figcaption>Routing skew: a few experts do most of the work</figcaption></figure>
 <p>In the average layer, <strong>the busiest 25% of experts handle 52% of the tokens, and the busiest 80% handle 95%.</strong> Stock llama.cpp can only place <em>whole layers</em> of experts: a layer's 512 experts are one tensor, all on the GPU or all on the CPU. It offloads a quarter of the experts, including popular ones, so a quarter of the expert work lands on the slow path.</p>
 <h2>step 3: split every layer into hot and cold</h2>
 <p>The first patch splits every layer's expert tensor in two at load time:</p>
@@ -59,18 +64,17 @@
 </ul>
 <p>With the same 19% of expert bytes on the CPU, the cold experts now serve only <strong>4.5% of routed tokens</strong> instead of ~19%, about 4x less slow-path traffic.</p>
 <p>Getting it right took four bugs, each instructive enough to list in its own section below. The result is <strong>30–32 tok/s</strong> with correct answers. That's +30%, but it's not the leap it should be, so I profiled it:</p>
-<p><img alt="Where one decoded word spent its time with cold experts in CPU RAM." src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/docs/img/table_profile.png" /></p>
-<p><em>Where one decoded word spent its time with cold experts in CPU RAM.</em></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_profile.jpg" alt="Where one decoded word spent its time with cold experts in CPU RAM."><figcaption>Where one decoded word spent its time with cold experts in CPU RAM.</figcaption></figure>
 <p>The CPU was barely reading any experts anymore; it was the <em>round trips</em> that cost. Every layer handed work to the CPU and waited for the answer. Then a cheap experiment: drop the cold experts entirely (quality garbage, speed only) and see how fast it goes fully on GPU: <strong>52 tok/s</strong>, and <strong>86–88 tok/s</strong> with speculative decoding. That was the target. The question became: <strong>how do you fit every expert in VRAM without wrecking quality?</strong></p>
 <h2>step 4: three shelves, all on the GPU</h2>
-<p><img alt="How one word gets written" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/one_word.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/one_word.jpg" alt="How one word gets written"><figcaption>How one word gets written</figcaption></figure>
 <p>The idea: if some experts do most of the work, <strong>give them more bits and squeeze the rarely-used ones harder</strong>. Everything still fits in VRAM, and most tokens still see a well-preserved expert. Think of a library that keeps its bestsellers in hardcover and prints the rarely-borrowed titles as compact paperbacks, so the whole collection fits in the building.</p>
-<p><img alt="What I built" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/diagrams/pipeline.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/pipeline.jpg" alt="What I built"><figcaption>What I built</figcaption></figure>
 <p>Two pieces make it work.</p>
 <p><strong>An offline re-packer</strong> (<a href="https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090/blob/main/tools/expert_tiers.py"><code>tools/expert_tiers.py</code></a>). It starts from the 8-bit model (188 GB) and uses the importance matrix for both <em>how often</em> each expert is used and <em>which inputs matter</em> inside it. A greedy planner fills a VRAM budget: each byte goes to the expert where it removes the most expected error. Every expert is then re-quantized with llama.cpp's own quantizers, and the file is written with the experts reordered hottest-first as three tensors per layer. One wrinkle: the down-projection matrices have rows 640 wide, which the fancy 2–3-bit formats can't handle (they need multiples of 256). So they get their own ladder: IQ4_NL / MXFP4 instead of IQ4_XS / IQ3.</p>
 <p><strong>A patched llama.cpp</strong> (<a href="https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090/tree/main/patches"><code>patches/</code></a>). <code>mul_mat_id</code>, the operation that runs "each word through its chosen experts", learns to take an <strong>id range</strong>. Each shelf's matrix multiply sees the router's full choice list, computes only the ids that fall on its shelf, and writes zeros for the rest. The three results simply add up. That meant touching the CPU kernels, three CUDA paths (decode, prefill, and the fused gate+up+activation kernel) and the loader. On top sits Qwen's multi-token-prediction draft head, from a <a href="https://github.com/ggml-org/llama.cpp/pull/28243">not-yet-merged llama.cpp PR</a>, re-quantized to 4 bits so it fits too.</p>
 <p>Result, in one chart:</p>
-<p><img alt="Decode journey" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/decode_journey.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/decode_journey.jpg" alt="Decode journey"><figcaption>Decode journey</figcaption></figure>
 <h2>the four bugs, briefly</h2>
 <p>For people who'll try this, and because two of them are delightful.</p>
 <ol>
@@ -81,9 +85,8 @@
 </ol>
 <h2>how much quality did it cost?</h2>
 <p>The honest meter is KL divergence against the 8-bit model over 24,576 tokens of Wikipedia text:</p>
-<p><img alt="Quality vs size" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/quality_vs_size.png" /></p>
-<p><img alt="Quality vs the 8-bit reference (KL divergence: lower is closer to the original)." src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/docs/img/table_quality.png" /></p>
-<p><em>Quality vs the 8-bit reference (KL divergence: lower is closer to the original).</em></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/quality_vs_size.jpg" alt="Quality vs size"><figcaption>Quality vs size</figcaption></figure>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_quality.jpg" alt="Quality vs the 8-bit reference (KL divergence: lower is closer to the original)."><figcaption>Quality vs the 8-bit reference (KL divergence: lower is closer to the original).</figcaption></figure>
 <p>What I take from it:</p>
 <ul>
 <li><strong>Fitting in VRAM costs quality, and there's no way around that.</strong> 20 GB less expert weight roughly doubles the KL divergence of the stock 4-bit build. That's physics, not a bug.</li>
@@ -91,10 +94,9 @@
 <li><strong>On a task, it holds up.</strong> GSM8K (200 grade-school maths questions, greedy, no thinking) scores <strong>95.5%</strong>. The 27B's published number on the same harness is 95.0–96.5%. GSM8K is saturated, so it mainly proves nothing broke. The model card's gains on agentic work are where the upgrade should show.</li>
 </ul>
 <h2>speed vs context, and the 256k profile</h2>
-<p><img alt="Speed vs context" src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/charts/speed_vs_context.png" /></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/speed_vs_context.jpg" alt="Speed vs context"><figcaption>Speed vs context</figcaption></figure>
 <p>Both profiles start at <strong>~80 tokens/second</strong> on a short prompt and slow down as the prompt grows. The per-word attention and indexer work grows with context, and the draft head's guesses get a little worse too. Typical numbers, averaging two runs:</p>
-<p><img alt="Speed vs prompt length for the two profiles (mean of two runs)." src="https://raw.githubusercontent.com/SikamikanikoBG/qwen38-flash-next-3x3090/main/docs/img/table_context.png" /></p>
-<p><em>Speed vs prompt length for the two profiles (mean of two runs).</em></p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_context.jpg" alt="Speed vs prompt length for the two profiles (mean of two runs)."><figcaption>Speed vs prompt length for the two profiles (mean of two runs).</figcaption></figure>
 <p>Prefill runs at <strong>540–860 tokens/second</strong>. That's the weak spot next to the 27B's ~1,300, and it's where I'd look next: it's also the part that makes a 120k-token prompt a three-minute wait.</p>
 <p>The 256k profile needed two more compromises. The KV cache drops to 8-bit, and experts shrink to 49.5 GiB, because the sparse-attention indexer's scratch memory grows with context and pushed a card out of memory at ~200k on the first try. After rebalancing layers across the cards, it read <strong>173,692 tokens of Wikipedia with a random 10-character code hidden at 45% depth, and returned the code: exactly right (<code>6BC5XYE8FS</code>). A second run with the code at 90% depth of 112,711 tokens was also exact.</strong> It took 6.1 minutes (472 tokens/second) to read that much. Long-context prefill on this architecture is still the slow part.</p>
 <h2>what it costs to run</h2>
@@ -131,5 +133,5 @@ llama-server -m fn-tier53-00001-of-00002.gguf -ngl 99 -ts 16,16,16 -c 131072 \
 <li><strong><a href="https://github.com/syv-ai/qwen38-27b-rtx3090">syv-ai/qwen38-27b-rtx3090</a></strong>, whose rigor on the 27B set the bar for measuring this.</li>
 </ul>
 <p><em>This project, from the patches and the tools to the measurements and this write-up, was done with </em><em>Claude Code</em><em> acting as my AI engineer, working on my hardware under my direction. The numbers are from vader, the raw data is in the repo, and the mistakes are both of ours.</em></p>
-<p><em>Originally published on <a href="https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi">DEV</a>.</em></p>
+<p><em>Originally published on <a href="https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi">DEV</a>. Code and data: <a href="https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090">github.com/SikamikanikoBG/qwen38-flash-next-3x3090</a>.</em></p>
 </article></body></html>
