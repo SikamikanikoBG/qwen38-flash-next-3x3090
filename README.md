@@ -7,6 +7,11 @@
 
 Write-up with diagrams and a plain-language glossary: **[Qwen3.8-Flash-Next (125B) on Three RTX 3090s at 80 Tokens/s: Teaching llama.cpp Which Experts Matter](https://dev.to/sikamikanikobg/i-ran-a-125b-model-on-three-rtx-3090s-at-80-tokenss-by-teaching-llamacpp-which-experts-matter-4ioi)** (dev.to).
 
+> **Real-world update (after a day behind an agent):** with ~25k-token prompts, sampling and thinking on, decode is
+> **30–45 tok/s** (2.6 vs 3.4 tokens per verify step: draft acceptance 39% vs 62% in the greedy benchmark). Serve agents with `-np 4 -kvu -c 98304` so every
+> role keeps its prompt prefix cached: time to first token on a returning 14k prompt drops from 20–45 s to **0.6–0.7 s**.
+> `scripts/serve-flash-next.sh` does this.
+
 ## the idea
 
 Qwen3.8-Flash-Next has 512 routed experts per layer (10 active per token). Routing is heavily skewed: in the average

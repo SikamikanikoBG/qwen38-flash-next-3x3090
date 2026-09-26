@@ -16,6 +16,9 @@ pre{background:#f5f5f5;padding:12px;overflow-x:auto} .tip{font-family:sans-serif
 <li><strong>Patch llama.cpp</strong> (~400 lines) so one routing decision drives three expert tables at once, then add speculative decoding on top.</li>
 </ol>
 <p>Quality stays close to the 8-bit reference: <strong>+1.9% perplexity, 91% same next token, GSM8K 95.5%</strong> (the 27B scores 95–96.5% on the same harness). There's also a 256k-context profile that finds a random code hidden 173,000 tokens deep. The trade-offs are real, and I've listed them. Everything is open: <a href="https://github.com/SikamikanikoBG/qwen38-flash-next-3x3090">patches, tools, raw measurements</a>.</p>
+<blockquote>
+<p><strong>Update, 26 Sep 2026, after the first day behind my assistant:</strong> the 80 tok/s holds for short prompts. In real agent use, with ~25k-token prompts, sampling and thinking on, the model decodes at <strong>30–45 tok/s</strong>. My first deployment also had a caching mistake that cost ~45 s before every answer; a server config change fixed it (now <strong>0.7 s</strong>). Details in the "real-world update" section below.</p>
+</blockquote>
 <h2>the use case</h2>
 <p>My box, <strong>vader</strong>, runs <a href="https://dev.to/sikamikanikobg/qwen38-27b-on-2x-rtx-3090-my-first-local-model-i-actually-trust-fpi">Qwen3.8-27B</a> around the clock: two RTX 3090s, vLLM, about 135 tokens/second. It's the first local model I actually trust with agent work, and it does most of the work my assistant does.</p>
 <p>Then Qwen shipped <strong>Qwen3.8-Flash-Next</strong>, the preview of their Qwen4 architecture. Their own model card puts it ahead of my 27B on almost everything I care about:</p>
@@ -101,9 +104,18 @@ pre{background:#f5f5f5;padding:12px;overflow-x:auto} .tip{font-family:sans-serif
 <p>The 256k profile needed two more compromises. The KV cache drops to 8-bit, and experts shrink to 49.5 GiB, because the sparse-attention indexer's scratch memory grows with context and pushed a card out of memory at ~200k on the first try. After rebalancing layers across the cards, it read <strong>173,692 tokens of Wikipedia with a random 10-character code hidden at 45% depth, and returned the code: exactly right (<code>6BC5XYE8FS</code>). A second run with the code at 90% depth of 112,711 tokens was also exact.</strong> It took 6.1 minutes (472 tokens/second) to read that much. Long-context prefill on this architecture is still the slow part.</p>
 <h2>what it costs to run</h2>
 <p>Measured at the cards (<code>nvidia-smi</code>, 5 Hz, three 1,024-token generations per profile): the three 3090s draw <strong>~540 W together while decoding</strong> and ~124 W at rest with the model loaded. That's <strong>7.5–8.4 joules per token</strong>, 2.1–2.3 kWh per million tokens. On my tariff (0.30 BGN/kWh day, 0.18 night) <strong>a million generated tokens cost 0.63–0.70 BGN in daytime, 0.38–0.42 BGN at night</strong>, about $0.35–0.40. <a href="https://dev.to/sikamikanikobg/qwen38-27b-on-one-rtx-3090-vs-two-20-decode-14-cold-prefill-and-3x-on-cached-prompts-55kc">The 27B costs 0.21–0.34 BGN</a> for the same million, so the bigger brain costs roughly twice as much per word, all three cards included. It's still coffee money.</p>
+<h2>real-world update: day one behind my assistant</h2>
+<p>Benchmarks are one request with a short prompt and greedy decoding. My assistant is none of those things, so after a day of it running Jarvis, here is what the server logs say about real requests:</p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_realworld.jpg" alt="A real assistant turn vs the benchmark."><figcaption>A real assistant turn vs the benchmark.</figcaption></figure>
+<p><strong>Decode: 30–45 tok/s, not 80.</strong> Two things compound. The prompt is deep, and every decoded word pays attention over it; the context chart above already shows ~50 tok/s at 60k. And the draft head guesses sampled text, tool-call JSON and reasoning worse than greedy prose, so speculative decoding saves less. That's the honest number for agent work on this box. For comparison, the 27B benchmarks at ~135 tok/s on this box, so the upgrade is intelligence, not speed.</p>
+<p><strong>Time to first token: the mistake was mine.</strong> My assistant runs several <em>roles</em>: chat, planner, classifier, triage, background jobs. Each has its own ~25k-token prompt prefix. I deployed the server with one slot (<code>-np 1</code>), so every time the role changed, the cached prefix was thrown away and <strong>25,000 tokens were re-read from scratch: ~45 seconds before every answer</strong>. The fix is four slots sharing one KV pool, so every role keeps its prefix warm:</p>
+<figure><img src="https://sikamikanikobg.github.io/qwen38-flash-next-3x3090/m/table_cache.jpg" alt="Returning to a cached prompt after another role ran: one slot vs four."><figcaption>Returning to a cached prompt after another role ran: one slot vs four.</figcaption></figure>
+<p>It isn't free: four slots need a little more memory, so the shared pool dropped from 128k to 96k tokens (128k with four slots ran out of VRAM). A single request can still use all 96k.</p>
+<p><strong>Schedule the background jobs apart.</strong> A model at 30–45 tok/s with 25k-token prompts spends minutes per agent task. My assistant had 13 scheduled jobs between 06:30 and 09:00 on Mondays, four of them at the same minute. I've spread them 30 minutes apart (05:00 to 11:30) so they stop queueing behind each other. I'll report after a week whether that's enough.</p>
+<p><strong>Images and video work too,</strong> once the vision projector is loaded (<code>--mmproj</code>, on the GPU with the most free memory: 4 s per photo, against 61 s on the CPU) and the container has <code>ffmpeg</code> for video (a 5-second clip in 6.4 s). The repo has the exact launcher.</p>
 <h2>what I'd not claim</h2>
 <ul>
-<li><strong>It's single-user.</strong> Everything here is one request at a time. The 27B on vLLM batches many users far better.</li>
+<li><strong>It's single-user.</strong> Every speed number here is one request at a time, and real agent turns decode at 30–45 tok/s, not 80. The 27B on vLLM batches many users far better.</li>
 <li><strong>The 27B is still faster.</strong> About 135 vs 80 tok/s decode, and roughly 1,300 vs 540–860 tok/s prefill. The 125B is smarter, not quicker.</li>
 <li><strong>It uses all three cards.</strong> You can't also keep the 27B running.</li>
 <li><strong>The quality numbers are wikitext + GSM8K.</strong> They say the compression is gentle. They don't prove the agentic gains survive intact; that needs agent benchmarks I haven't run yet.</li>
@@ -120,9 +132,10 @@ python tools/expert_tiers.py write --src Qwen3.8-Flash-Next-Q8_0-00001-of-00006.
   --imatrix imatrix_unsloth.gguf --budget-gib 53 \
   --gu Q6_K,IQ4_XS,IQ3_XXS --dn Q8_0,IQ4_NL,MXFP4 --out fn-tier53.gguf
 
-# serve: all layers on GPU, 128k context, MTP drafting 4 tokens
-llama-server -m fn-tier53-00001-of-00002.gguf -ngl 99 -ts 16,16,16 -c 131072 \
+# serve: all layers on GPU, 4 slots sharing a 96k KV pool, vision, MTP drafting 4 tokens
+llama-server -m fn-tier53-00001-of-00002.gguf -ngl 99 -ts 16,16,16 -c 98304 -np 4 -kvu \
   -b 1024 -ub 256 -fa on --jinja \
+  --mmproj mmproj-F16.gguf -mmdev CUDA1 --image-max-tokens 1024 \
   -md mtp-shared-iq4.gguf --spec-type draft-mtp --spec-draft-n-max 4
 </code></pre>
 <h2>credits</h2>
