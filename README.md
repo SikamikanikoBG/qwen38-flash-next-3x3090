@@ -78,6 +78,39 @@ llama-server -m fn-tier53-00001-of-00002.gguf -ngl 99 -ts 16,16,16 -c 131072 -b 
 `-ub 256` matters: at 4 tiers of MoE matmuls the CUDA memory pool grows during long prefills, and with 512 the cards run
 out of memory. `-ts` should leave the card that holds the output head a little lighter.
 
+For day-to-day serving, `scripts/serve-flash-next.sh` wraps all of this (plus vision, below) in a restart-on-boot
+container built from `docker/Dockerfile`: `PROFILE=128k LAB=/path/to/lab scripts/serve-flash-next.sh`.
+
+## images and video
+
+Qwen3.8-Flash-Next is multimodal, and llama-server serves images and video through the OpenAI API
+(`image_url` / `video_url` content parts, data URIs or URLs) once two things are in place:
+
+1. **The vision projector.** Download `mmproj-F16.gguf` (0.9 GB) from `unsloth/Qwen3.8-Flash-Next-GGUF` and pass
+   `--mmproj mmproj-F16.gguf`. Without it, image requests fail with HTTP 500 ("image input is not supported").
+2. **ffmpeg in the container.** Video frames are decoded with `ffprobe`/`ffmpeg`; without them video requests fail
+   with HTTP 400 and the server log says `ffprobe failed on buffer`. `docker/Dockerfile` installs it.
+
+Where the projector runs matters more than anything else here:
+
+| projector placement | 1536x864 photo, 200-token answer | 5 s 640x360 clip |
+|---|---|---|
+| `--no-mmproj-offload` (CPU) | 61 s | – |
+| `-mmdev CUDA1 --image-max-tokens 1024` | **4 s** | **6.4 s** |
+
+The GPUs are nearly full with the 128k profile, so put the projector on the card with the most free memory
+(`-mmdev CUDA1` here) and cap image size with `--image-max-tokens 1024` to bound its scratch memory. With that,
+a 57k-token text prompt still runs without running out of memory. Long videos become many frames, and every frame
+costs context and prefill time: short clips are quick, multi-minute videos are not.
+
+```bash
+curl http://localhost:18100/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "qwen3.8-flash-next",
+  "messages": [{"role": "user", "content": [
+    {"type": "text", "text": "What text appears in this video?"},
+    {"type": "video_url", "video_url": {"url": "data:video/mp4;base64,<...>"}}]}]}'
+```
+
 ## tools
 
 | file | what |
@@ -88,6 +121,8 @@ out of memory. `-ts` should leave the card that holds the output head a little l
 | `tools/bench.py` | single-stream speed bench against llama-server (server-side timings) |
 | `tools/gsm8k_eval.py`, `tools/needle.py` | GSM8K and needle-in-a-haystack checks |
 | `tools/make_charts.py` | the charts in this README from `results/` |
+| `scripts/serve-flash-next.sh` | production launcher: 128k/256k profile, vision + video, MTP, restart-on-boot |
+| `docker/Dockerfile` | build/runtime image (CUDA 13, cmake, ffmpeg for video) |
 
 ## caveats
 
