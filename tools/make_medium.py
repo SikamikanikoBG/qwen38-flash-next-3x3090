@@ -75,7 +75,8 @@ pre{{background:#f5f5f5;padding:12px;overflow-x:auto}} .tip{{font-family:sans-se
 {html}
 <p><em>Originally published on <a href="{DEVTO}">DEV</a>. Code and data: <a href="{REPO}">{REPO.replace('https://', '')}</a>.</em></p>
 </article></body></html>"""
-    open(os.path.join(root, "docs", "medium.html"), "w").write(page)
+    for name in ("medium.html", "index.html"):  # index.html so the bare site URL works too
+        open(os.path.join(root, "docs", name), "w").write(page)
     for f in os.listdir(tmpdir):
         os.remove(os.path.join(tmpdir, f))
     os.rmdir(tmpdir)
